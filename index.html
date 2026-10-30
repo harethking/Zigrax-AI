@@ -1069,6 +1069,17 @@ function renderBar(){
 function renderAll(){ renderChat(); renderList(); renderBar(); renderUsage(); }
 
 /* ========== Settings modal (admin only) ========== */
+// detect provider from the key's prefix (Groq "gsk_" vs Grok "xai-" are easy to mix up)
+function keyProvider(k){
+  if(/^gsk_/.test(k)) return 'groq';
+  if(/^xai-/.test(k)) return 'xai';
+  if(/^sk-ant-/.test(k)) return 'anthropic';
+  if(/^sk-or-/.test(k)) return 'openrouter';
+  if(/^pplx-/.test(k)) return 'perplexity';
+  if(/^AIza/.test(k)) return 'gemini';
+  if(/^sk-(proj-|svcacct-|admin-)/.test(k)) return 'openai';
+  return null;   // plain "sk-" is shared by OpenAI and DeepSeek, Mistral has no prefix → keep the field the admin chose
+}
 let delKeys = new Set();
 async function openSettings(){
   if(!isAdmin()) return;
@@ -1115,8 +1126,17 @@ async function saveSettingsFromModal(){
     const cfg = {models, smart:$('#smartChk').checked, enhance:$('#enhChk').checked, default_pref:$('#defPref').value, updated_at:new Date().toISOString()};
     const r1 = await sb.from('app_settings').update(cfg).eq('id', 1);
     if(r1.error) throw r1.error;
-    const ups = [];
-    document.querySelectorAll('#keyRows [data-k]').forEach(i => { const v = i.value.trim(); if(v) ups.push({provider:i.dataset.k, api_key:v, updated_at:new Date().toISOString()}); });
+    const ups = [], moved = [];
+    document.querySelectorAll('#keyRows [data-k]').forEach(i => {
+      const v = i.value.replace(/\s+/g, '');
+      if(!v) return;
+      const real = keyProvider(v);
+      const prov = real || i.dataset.k;
+      if(real && real !== i.dataset.k) moved.push(PROVIDERS[real].name);
+      const ex = ups.find(u => u.provider === prov);
+      if(ex) ex.api_key = v; else ups.push({provider:prov, api_key:v, updated_at:new Date().toISOString()});
+    });
+    if(moved.length) toast('مفتاح انلصق بالمكان الغلط — حفظته تلقائياً تحت: ' + moved.join('، '));
     if(ups.length){ const r2 = await sb.from('app_secrets').upsert(ups); if(r2.error) throw r2.error; }
     const dels = [...delKeys].filter(p => !ups.some(u => u.provider === p));
     if(dels.length){ const r3 = await sb.from('app_secrets').delete().in('provider', dels); if(r3.error) throw r3.error; }
