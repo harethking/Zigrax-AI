@@ -238,8 +238,8 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
     <div class="atabs" id="atabs"><button data-v="login" class="on">تسجيل الدخول</button><button data-v="signup">إنشاء حساب</button></div>
 
     <form class="af on" id="vLogin" autocomplete="on">
-      <label>رقم الهاتف</label>
-      <input class="in" id="lPhone" type="tel" inputmode="tel" placeholder="07XX XXX XXXX" autocomplete="tel">
+      <label>البريد الإلكتروني</label>
+      <input class="in" id="lEmail" type="email" inputmode="email" placeholder="name@example.com" autocomplete="email">
       <label>كلمة المرور</label>
       <input class="in" id="lPass" type="password" autocomplete="current-password">
       <button class="go" type="submit">دخول</button>
@@ -249,8 +249,8 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
     <form class="af" id="vSignup" autocomplete="on">
       <label>الاسم</label>
       <input class="in rtl" id="sName" placeholder="اسمك الكامل" autocomplete="name">
-      <label>رقم الهاتف</label>
-      <input class="in" id="sPhone" type="tel" inputmode="tel" placeholder="07XX XXX XXXX" autocomplete="tel">
+      <label>البريد الإلكتروني</label>
+      <input class="in" id="sEmail" type="email" inputmode="email" placeholder="name@example.com" autocomplete="email">
       <label>كلمة المرور (8 أحرف على الأقل)</label>
       <input class="in" id="sPass" type="password" autocomplete="new-password">
       <label>تأكيد كلمة المرور</label>
@@ -259,19 +259,19 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
     </form>
 
     <form class="af" id="vForgot">
-      <div class="anote">اكتب رقمك وراح نرسل لك رمز برسالة SMS حتى تعيّن كلمة مرور جديدة.</div>
-      <label>رقم الهاتف</label>
-      <input class="in" id="fPhone" type="tel" inputmode="tel" placeholder="07XX XXX XXXX">
+      <div class="anote">اكتب بريدك وراح نرسل لك رمز من 6 أرقام حتى تعيّن كلمة مرور جديدة.</div>
+      <label>البريد الإلكتروني</label>
+      <input class="in" id="fEmail" type="email" inputmode="email" placeholder="name@example.com" autocomplete="email">
       <button class="go" type="submit">إرسال الرمز</button>
       <button class="lnk" type="button" data-back>رجوع لتسجيل الدخول</button>
     </form>
 
     <form class="af" id="vOtp">
-      <div class="anote">أرسلنا رمز تأكيد من 6 أرقام برسالة SMS إلى<br><b dir="ltr" id="otpPhone"></b></div>
+      <div class="anote">أرسلنا رمز تأكيد من 6 أرقام إلى بريدك<br><b dir="ltr" id="otpTo"></b><br><span style="font-size:12px">إذا ما وصلك، شوف مجلد الرسائل غير المرغوبة (Spam)</span></div>
       <input class="in otp" id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••">
       <button class="go" type="submit">تأكيد</button>
       <button class="lnk" type="button" id="resendBtn">إعادة إرسال الرمز</button>
-      <button class="lnk" type="button" data-back>تغيير الرقم</button>
+      <button class="lnk" type="button" data-back>تغيير البريد</button>
     </form>
 
     <form class="af" id="vNewPass">
@@ -663,7 +663,7 @@ async function refreshQuota(){
   quotaLoading = true;
   try{
     const { data, error } = await sb.rpc('my_quota');
-    if(!error && data){ quotaState = data; if(data.full_name || data.phone) me = Object.assign(me || {}, {name:data.full_name, phone:data.phone}); }
+    if(!error && data){ quotaState = data; if(me) Object.assign(me, {name:data.full_name || me.name, email:data.email || me.email}); }
   } finally { quotaLoading = false; renderUsage(); }
 }
 function limitsOf(id){ const M = PLANS[id].tokens, W = M / 4, D = W / 7, P = D / 4; return {M, W, D, P}; }
@@ -726,7 +726,7 @@ function openPlans(){
 }
 function showBuy(id){
   const P = PLANS[id];
-  const who = me && me.phone ? ' — رقمي: ' + me.phone : '';
+  const who = me && me.email ? ' — حسابي: ' + me.email : '';
   const wa = CONTACT_WHATSAPP ? 'https://wa.me/' + CONTACT_WHATSAPP + '?text=' + encodeURIComponent('أريد الاشتراك في باقة ' + P.name + ' في Zigrax AI بسعر ' + fmt(P.price) + ' د.ع' + who) : '';
   $('#buyBox').innerHTML = '<b>الاشتراك في باقة ' + P.name + ' — ' + fmt(P.price) + ' د.ع</b><div class="hint" style="margin-top:4px">ادفع المبلغ وأرسل الوصل، وتستلم كود التفعيل.</div>' +
     (wa ? '<a class="btn" style="display:inline-block;margin-top:8px;text-decoration:none" target="_blank" rel="noopener" href="' + esc(wa) + '">💬 تواصل عبر واتساب</a>' : '') +
@@ -734,28 +734,25 @@ function showBuy(id){
   $('#buyBox').style.display = 'block';
 }
 
-/* ========== Auth (phone + SMS OTP) ========== */
-let otpCtx = null;            // {phone, mode:'signup'|'login'|'recovery'}
+/* ========== Auth (email + 6-digit code) ========== */
+let otpCtx = null;            // {email, mode:'signup'|'login'|'recovery'}
 let inRecovery = false;
 let resendTimer = null;
-function normPhone(v){
-  let s = String(v || '').replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[\s\-()]/g, '');
-  if(s.startsWith('00')) s = '+' + s.slice(2);
-  if(/^07\d{9}$/.test(s)) s = '+964' + s.slice(1);
-  else if(/^7\d{9}$/.test(s)) s = '+964' + s;
-  else if(/^9647\d{9}$/.test(s)) s = '+' + s;
-  return /^\+\d{8,15}$/.test(s) ? s : null;
+function normEmail(v){
+  const s = String(v || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) ? s : null;
 }
 function authMsg(t, ok){ const e = $('#aerr'); e.textContent = t || ''; e.className = 'aerr' + (ok ? ' ok' : ''); e.style.display = t ? 'block' : 'none'; }
 function authErr(err){
   const m = (err && err.message) || String(err || '');
-  if(/Invalid login credentials/i.test(m)) return 'رقم الهاتف أو كلمة المرور غير صحيحة';
-  if(/already registered|already exists/i.test(m)) return 'هذا الرقم مسجّل مسبقاً — سجّل الدخول';
+  if(/Invalid login credentials/i.test(m)) return 'البريد أو كلمة المرور غير صحيحة';
+  if(/already registered|already exists/i.test(m)) return 'هذا البريد مسجّل مسبقاً — سجّل الدخول';
   if(/expired|invalid.*(otp|token)|token.*invalid/i.test(m)) return 'الرمز غير صحيح أو منتهي الصلاحية';
-  if(/sms|phone provider|unsupported phone|twilio|messagebird|vonage|textlocal/i.test(m)) return 'خدمة الرسائل SMS غير مفعّلة بعد على السيرفر';
+  if(/sending.*email|smtp|email.*(provider|send)/i.test(m)) return 'تعذّر إرسال البريد — خدمة البريد غير مضبوطة بعد على السيرفر';
   if(/for security purposes|rate limit|too many/i.test(m)) return 'طلبات كثيرة — انتظر قليلاً ثم حاول مرة ثانية';
   if(/password.*(short|least|weak)/i.test(m)) return 'كلمة المرور ضعيفة أو قصيرة';
-  if(/user not found|signups not allowed/i.test(m)) return 'لا يوجد حساب بهذا الرقم';
+  if(/invalid.*email|email.*invalid/i.test(m)) return 'البريد الإلكتروني غير صحيح';
+  if(/user not found|signups not allowed/i.test(m)) return 'لا يوجد حساب بهذا البريد';
   if(/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'تعذّر الاتصال — تحقّق من الإنترنت';
   return m;
 }
@@ -776,9 +773,9 @@ function startResendTimer(){
     else b.textContent = 'إعادة الإرسال بعد ' + n + ' ث';
   }, 1000);
 }
-function goOtp(phone, mode, msg){
-  otpCtx = {phone, mode};
-  $('#otpPhone').textContent = phone;
+function goOtp(email, mode, msg){
+  otpCtx = {email, mode};
+  $('#otpTo').textContent = email;
   $('#otpCode').value = '';
   view('vOtp');
   if(msg) authMsg(msg, true);
@@ -791,7 +788,7 @@ function hideAuth(){ $('#auth').classList.add('off'); }
 async function enterApp(session){
   const uid = session.user.id;
   if(me && me.id === uid) return;
-  me = {id:uid, phone:session.user.phone ? '+' + String(session.user.phone).replace(/^\+/, '') : '', name:(session.user.user_metadata || {}).full_name || ''};
+  me = {id:uid, email:session.user.email || '', name:(session.user.user_metadata || {}).full_name || ''};
   LS = LS_BASE + uid + '_';
   settings = Object.assign({ids:{}, orIds:{}, disabled:{}, pref:'balanced', smart:true, enhance:true, mode:'auto'}, load('settings', {}));
   delete settings.keys;
@@ -821,49 +818,49 @@ function leaveApp(){
 
 $('#atabs').onclick = e => { const b = e.target.closest('button'); if(b) view(b.dataset.v === 'login' ? 'vLogin' : 'vSignup'); };
 document.querySelectorAll('#auth [data-back]').forEach(b => b.onclick = () => { inRecovery = false; view('vLogin'); });
-$('#forgotBtn').onclick = () => { $('#fPhone').value = $('#lPhone').value; view('vForgot'); };
+$('#forgotBtn').onclick = () => { $('#fEmail').value = $('#lEmail').value; view('vForgot'); };
 
 $('#vLogin').onsubmit = async e => {
   e.preventDefault();
-  const phone = normPhone($('#lPhone').value), password = $('#lPass').value;
-  if(!phone) return authMsg('رقم الهاتف غير صحيح — مثال: 07701234567');
+  const email = normEmail($('#lEmail').value), password = $('#lPass').value;
+  if(!email) return authMsg('البريد الإلكتروني غير صحيح');
   if(!password) return authMsg('اكتب كلمة المرور');
   busyForm(e.target, true);
-  const { error } = await sb.auth.signInWithPassword({phone, password});
+  const { error } = await sb.auth.signInWithPassword({email, password});
   busyForm(e.target, false);
   if(!error) return;
   if(/not confirmed/i.test(error.message || '')){
-    const r = await sb.auth.resend({type:'sms', phone});
+    const r = await sb.auth.resend({type:'signup', email});
     if(r.error) return authMsg(authErr(r.error));
-    return goOtp(phone, 'login', 'رقمك غير مؤكد بعد — أرسلنا لك رمز تأكيد');
+    return goOtp(email, 'login', 'بريدك غير مؤكد بعد — أرسلنا لك رمز تأكيد');
   }
   authMsg(authErr(error));
 };
 
 $('#vSignup').onsubmit = async e => {
   e.preventDefault();
-  const name = $('#sName').value.trim(), phone = normPhone($('#sPhone').value), p1 = $('#sPass').value, p2 = $('#sPass2').value;
+  const name = $('#sName').value.trim(), email = normEmail($('#sEmail').value), p1 = $('#sPass').value, p2 = $('#sPass2').value;
   if(name.length < 2) return authMsg('اكتب اسمك');
-  if(!phone) return authMsg('رقم الهاتف غير صحيح — مثال: 07701234567');
+  if(!email) return authMsg('البريد الإلكتروني غير صحيح');
   if(p1.length < 8) return authMsg('كلمة المرور لازم تكون 8 أحرف على الأقل');
   if(p1 !== p2) return authMsg('كلمتا المرور غير متطابقتين');
   busyForm(e.target, true);
-  const { data, error } = await sb.auth.signUp({phone, password:p1, options:{data:{full_name:name}}});
+  const { data, error } = await sb.auth.signUp({email, password:p1, options:{data:{full_name:name}}});
   busyForm(e.target, false);
   if(error) return authMsg(authErr(error));
-  if(data && data.session) return;            // phone confirmations disabled → signed in directly
-  goOtp(phone, 'signup');
+  if(data && data.session) return;            // email confirmation disabled → signed in directly
+  goOtp(email, 'signup');
 };
 
 $('#vForgot').onsubmit = async e => {
   e.preventDefault();
-  const phone = normPhone($('#fPhone').value);
-  if(!phone) return authMsg('رقم الهاتف غير صحيح — مثال: 07701234567');
+  const email = normEmail($('#fEmail').value);
+  if(!email) return authMsg('البريد الإلكتروني غير صحيح');
   busyForm(e.target, true);
-  const { error } = await sb.auth.signInWithOtp({phone, options:{shouldCreateUser:false}});
+  const { error } = await sb.auth.resetPasswordForEmail(email);
   busyForm(e.target, false);
   if(error) return authMsg(authErr(error));
-  goOtp(phone, 'recovery');
+  goOtp(email, 'recovery');
 };
 
 $('#otpCode').addEventListener('input', e => {
@@ -877,7 +874,7 @@ $('#vOtp').onsubmit = async e => {
   if(token.length !== 6) return authMsg('الرمز 6 أرقام');
   busyForm(e.target, true);
   if(otpCtx.mode === 'recovery') inRecovery = true;
-  const { error } = await sb.auth.verifyOtp({phone:otpCtx.phone, token, type:'sms'});
+  const { error } = await sb.auth.verifyOtp({email:otpCtx.email, token, type:otpCtx.mode === 'recovery' ? 'recovery' : 'email'});
   busyForm(e.target, false);
   if(error){ inRecovery = false; $('#otpCode').value = ''; return authMsg(authErr(error)); }
   clearInterval(resendTimer);
@@ -886,8 +883,8 @@ $('#vOtp').onsubmit = async e => {
 $('#resendBtn').onclick = async () => {
   if(!otpCtx) return;
   const r = otpCtx.mode === 'recovery'
-    ? await sb.auth.signInWithOtp({phone:otpCtx.phone, options:{shouldCreateUser:false}})
-    : await sb.auth.resend({type:'sms', phone:otpCtx.phone});
+    ? await sb.auth.resetPasswordForEmail(otpCtx.email)
+    : await sb.auth.resend({type:'signup', email:otpCtx.email});
   if(r.error) return authMsg(authErr(r.error));
   authMsg('تم إرسال رمز جديد ✓', true);
   startResendTimer();
@@ -907,7 +904,7 @@ $('#vNewPass').onsubmit = async e => {
 };
 $('#userBtn').onclick = async () => {
   if(!me) return showAuth();
-  if(!confirm((me.name ? me.name + '\n' : '') + (me.phone || '') + '\n\nتسجيل الخروج؟')) return;
+  if(!confirm((me.name ? me.name + '\n' : '') + (me.email || '') + '\n\nتسجيل الخروج؟')) return;
   await sb.auth.signOut();
 };
 sb.auth.onAuthStateChange((event, session) => {
