@@ -206,13 +206,17 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
 
 <div class="modal" id="setModal">
   <div class="mbox">
-    <h2>⚙️ الإعدادات</h2>
-    <p class="s">مفاتيح الـ API محفوظة على السيرفر بأمان، ولا تظهر في التطبيق.</p>
-    <h3>🔌 المزوّدات المفعّلة</h3>
+    <h2>⚙️ لوحة الأدمن</h2>
+    <p class="s">هذه اللوحة تظهر لك فقط. أي تغيير هنا ينطبق على كل المستخدمين.</p>
+    <h3>🔑 مفاتيح API</h3>
+    <p class="s">محفوظة بقاعدة البيانات ولا يقدر يشوفها غير الأدمن. اترك الخانة فارغة حتى يبقى المفتاح الحالي، أو اضغط 🗑 لحذفه.</p>
     <div id="keyRows"></div>
     <h3>🧠 العقل الذكي</h3>
     <label class="sw"><input type="checkbox" id="smartChk"> تحليل الطلب بنموذج اقتصادي (أدق من القواعد السريعة)</label>
     <label class="sw"><input type="checkbox" id="enhChk"> تحسين وصف الصور تلقائياً قبل التصميم</label>
+    <label class="sw">الوضع الافتراضي للمستخدمين:
+      <select class="msel" id="defPref"><option value="economy">💰 اقتصادي</option><option value="balanced">⚖️ متوازن</option><option value="best">🏆 أفضل جودة</option></select>
+    </label>
     <h3>🤖 النماذج</h3>
     <p class="s">أسماء النماذج تتغيّر مع الوقت — عدّل المعرّف (ID) إذا صدر إصدار أحدث. معرّف OpenRouter يُستخدم فقط إذا لم يوجد مفتاح المزوّد المباشر.</p>
     <table class="mt"><thead><tr><th>تفعيل</th><th>النموذج</th><th>معرّف المزوّد</th><th class="hide-m">معرّف OpenRouter</th><th>الحالة</th></tr></thead><tbody id="modelRows"></tbody></table>
@@ -798,18 +802,39 @@ async function enterApp(session){
   convs.forEach(c => c.msgs.forEach(m => { if(m.pending){ delete m.pending; if(!m.text && !m.image) m.error = 'انقطع الطلب قبل اكتماله'; } }));
   hideAuth();
   renderAll();
+  await Promise.all([fetchProviders(), refreshQuota()]);
+  await loadAppSettings();
+  applyRoleUI();
+  renderAll();
+  if(!serverProviders.length) toast(isAdmin() ? 'أضف مفتاح API واحد على الأقل من ⚙️ لوحة الأدمن' : 'الخدمة غير جاهزة بعد — حاول لاحقاً');
+}
+async function fetchProviders(){
   try{
     const { data:{ session:s } } = await sb.auth.getSession();
     const res = await fetch(FN_URL, {method:'POST', headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + s.access_token, 'apikey':SB_KEY}, body:JSON.stringify({op:'providers'})});
     const d = await res.json();
     serverProviders = Array.isArray(d.providers) ? d.providers : [];
   }catch(e){ serverProviders = []; }
-  await refreshQuota();
-  renderAll();
-  if(!serverProviders.length) toast('لا توجد نماذج مفعّلة على السيرفر بعد');
+}
+// ===== Roles: admin sees models/keys; users only chat =====
+let appCfg = null;
+const isAdmin = () => !!(quotaState && quotaState.role === 'admin');
+async function loadAppSettings(){
+  const { data, error } = await sb.from('app_settings').select('models, default_pref, smart, enhance').eq('id', 1).maybeSingle();
+  if(error || !data) return;
+  appCfg = data;
+  const mc = data.models || {};
+  settings.ids = mc.ids || {}; settings.orIds = mc.orIds || {}; settings.disabled = mc.disabled || {};
+  settings.smart = data.smart !== false; settings.enhance = data.enhance !== false;
+  if(!isAdmin()){ settings.pref = data.default_pref || 'balanced'; settings.mode = 'auto'; }
+}
+function applyRoleUI(){
+  const a = isAdmin();
+  ['#setBtn', '#modeSel', '#prefSeg', '#brainHint'].forEach(sel => { $(sel).style.display = a ? '' : 'none'; });
+  if(!a){ settings.mode = 'auto'; if(appCfg) settings.pref = appCfg.default_pref || 'balanced'; }
 }
 function leaveApp(){
-  me = null; quotaState = null; serverProviders = [];
+  me = null; quotaState = null; serverProviders = []; appCfg = null;
   LS = LS_BASE; convs = []; curId = null;
   view('vLogin');
   showAuth();
@@ -1011,7 +1036,9 @@ function renderChat(){
       return '<div class="msg user"><div class="bub">' + (x.image ? '<img class="thumb" src="' + esc(x.image) + '" alt="">' : '') + md(x.text) + '</div></div>';
     }
     let h = '';
-    if(x.meta){
+    if(x.meta && !isAdmin()){
+      if(x.tokens) h += '<div class="meta"><span class="chip">🪙 ' + fmt(x.tokens) + ' توكن</span></div>';
+    } else if(x.meta){
       h += '<div class="meta"><span class="chip m">🤖 ' + esc(x.meta.model) + (x.meta.via === 'openrouter' ? ' · OpenRouter' : '') + '</span><span class="chip">' + esc(TASKS[x.meta.task] || x.meta.task) + '</span><span class="chip">صعوبة ' + x.meta.complexity + '/3</span>' + (x.tokens ? '<span class="chip">🪙 ' + fmt(x.tokens) + ' توكن</span>' : '') + '</div>';
       h += '<div class="why">🧠 ' + esc(x.meta.why) + (x.meta.reason ? ' — ' + esc(x.meta.reason) : '') + ' <span style="opacity:.7">(تحليل: ' + esc(x.meta.by) + (x.meta.alts && x.meta.alts.length ? ' · بدائل: ' + esc(x.meta.alts.join('، ')) : '') + ')</span></div>';
     }
@@ -1041,12 +1068,26 @@ function renderBar(){
 }
 function renderAll(){ renderChat(); renderList(); renderBar(); renderUsage(); }
 
-/* ========== Settings modal ========== */
-function openSettings(){
-  $('#keyRows').innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px">' + Object.keys(PROVIDERS).map(p =>
-    '<span class="tag' + (serverProviders.includes(p) ? ' y' : '') + '">' + (serverProviders.includes(p) ? '✓ ' : '') + esc(PROVIDERS[p].name) + '</span>').join('') + '</div>';
+/* ========== Settings modal (admin only) ========== */
+let delKeys = new Set();
+async function openSettings(){
+  if(!isAdmin()) return;
+  delKeys = new Set();
+  const { data:sec } = await sb.from('app_secrets').select('provider, api_key');
+  const saved = {};
+  (sec || []).forEach(r => { saved[r.provider] = String(r.api_key || ''); });
+  $('#keyRows').innerHTML = Object.keys(PROVIDERS).map(p => {
+    const k = saved[p];
+    const on = serverProviders.includes(p);
+    const hint = k ? 'محفوظ: ••••' + k.slice(-4) : (on ? 'مفعّل من Supabase Secrets' : PROVIDERS[p].hint);
+    return '<div class="krow"><label>' + (on ? '✅ ' : '⚪ ') + esc(PROVIDERS[p].name) + '</label>' +
+      '<input class="in" type="password" autocomplete="off" data-k="' + p + '" placeholder="' + esc(hint) + '">' +
+      '<div style="display:flex;gap:4px"><button class="btn" data-show="' + p + '" type="button" title="إظهار">👁</button>' +
+      (k ? '<button class="btn" data-delk="' + p + '" type="button" title="حذف المفتاح">🗑</button>' : '') + '</div></div>';
+  }).join('');
   $('#smartChk').checked = !!settings.smart;
   $('#enhChk').checked = !!settings.enhance;
+  $('#defPref').value = (appCfg && appCfg.default_pref) || 'balanced';
   $('#modelRows').innerHTML = MODELS.map(m => {
     const r = routeOf(m);
     const st = r ? (r.via === 'openrouter' ? '<span class="tag o">عبر OpenRouter</span>' : '<span class="tag y">جاهز</span>') : '<span class="tag">بدون مفتاح</span>';
@@ -1058,22 +1099,46 @@ function openSettings(){
   }).join('');
   $('#setModal').classList.add('on');
 }
-function saveSettingsFromModal(){
-  settings.smart = $('#smartChk').checked;
-  settings.enhance = $('#enhChk').checked;
+async function saveSettingsFromModal(){
+  if(!isAdmin()) return;
+  const models = {ids:{}, orIds:{}, disabled:{}};
   MODELS.forEach(m => {
     const en = document.querySelector('[data-en="' + m.key + '"]');
     const id = document.querySelector('[data-id="' + m.key + '"]');
     const or = document.querySelector('[data-or="' + m.key + '"]');
-    if(en && !en.checked) settings.disabled[m.key] = true; else delete settings.disabled[m.key];
-    if(id){ const v = id.value.trim(); if(v && v !== m.id) settings.ids[m.key] = v; else delete settings.ids[m.key]; }
-    if(or){ const v = or.value.trim(); if(v !== m.or) settings.orIds[m.key] = v; else delete settings.orIds[m.key]; }
+    if(en && !en.checked) models.disabled[m.key] = true;
+    if(id){ const v = id.value.trim(); if(v && v !== m.id) models.ids[m.key] = v; }
+    if(or){ const v = or.value.trim(); if(v !== m.or) models.orIds[m.key] = v; }
   });
-  saveSettings();
-  $('#setModal').classList.remove('on');
-  renderBar();
-  toast('تم الحفظ ✓');
+  const btn = $('#setSave'); btn.disabled = true;
+  try{
+    const cfg = {models, smart:$('#smartChk').checked, enhance:$('#enhChk').checked, default_pref:$('#defPref').value, updated_at:new Date().toISOString()};
+    const r1 = await sb.from('app_settings').update(cfg).eq('id', 1);
+    if(r1.error) throw r1.error;
+    const ups = [];
+    document.querySelectorAll('#keyRows [data-k]').forEach(i => { const v = i.value.trim(); if(v) ups.push({provider:i.dataset.k, api_key:v, updated_at:new Date().toISOString()}); });
+    if(ups.length){ const r2 = await sb.from('app_secrets').upsert(ups); if(r2.error) throw r2.error; }
+    const dels = [...delKeys].filter(p => !ups.some(u => u.provider === p));
+    if(dels.length){ const r3 = await sb.from('app_secrets').delete().in('provider', dels); if(r3.error) throw r3.error; }
+    await fetchProviders();
+    await loadAppSettings();
+    $('#setModal').classList.remove('on');
+    renderAll();
+    toast('تم الحفظ لكل المستخدمين ✓');
+  }catch(e){
+    toast('تعذّر الحفظ: ' + ((e && e.message) || e));
+  }finally{ btn.disabled = false; }
 }
+$('#keyRows').onclick = e => {
+  const sh = e.target.closest('[data-show]');
+  if(sh){ const i = document.querySelector('[data-k="' + sh.dataset.show + '"]'); i.type = i.type === 'password' ? 'text' : 'password'; return; }
+  const d = e.target.closest('[data-delk]');
+  if(d){
+    const p = d.dataset.delk;
+    if(delKeys.has(p)){ delKeys.delete(p); d.style.borderColor = ''; d.title = 'حذف المفتاح'; }
+    else { delKeys.add(p); d.style.borderColor = 'var(--err)'; d.title = 'سيُحذف عند الحفظ'; toast('سيُحذف مفتاح ' + PROVIDERS[p].name + ' عند الحفظ'); }
+  }
+};
 
 /* ========== Attachments ========== */
 function clearAtt(){ pendingImg = null; $('#attPrev').style.display = 'none'; $('#file').value = ''; }
