@@ -318,14 +318,14 @@ const COMPAT_URL = {
 const TASKS = {chat:'محادثة', code:'برمجة', reasoning:'تفكير ورياضيات', writing:'كتابة وترجمة', vision:'تحليل صورة', image_gen:'تصميم صورة', image_edit:'تعديل صورة', long:'نص طويل', search:'بحث ومعلومات حديثة'};
 // q = quality score per task (0-10), cost = relative cost (1 cheapest)
 const MODELS = [
-  {key:'gemini-flash', name:'Gemini Flash', provider:'gemini', id:'gemini-2.5-flash', or:'google/gemini-2.5-flash', kind:'text', cost:1, q:{chat:8,code:7,reasoning:7,writing:7,vision:8,long:9}},
-  {key:'gemini-pro', name:'Gemini Pro', provider:'gemini', id:'gemini-2.5-pro', or:'google/gemini-2.5-pro', kind:'text', cost:4, q:{chat:9,code:9,reasoning:9,writing:8,vision:9,long:10}},
+  {key:'gemini-flash', name:'Gemini Flash', provider:'gemini', id:'gemini-3.6-flash', or:'google/gemini-3.6-flash', kind:'text', cost:1, q:{chat:8,code:7,reasoning:7,writing:7,vision:8,long:9}},
+  {key:'gemini-pro', name:'Gemini 4', provider:'gemini', id:'gemini-4-argon', or:'google/gemini-4-argon', kind:'text', cost:4, q:{chat:9,code:9,reasoning:9,writing:8,vision:9,long:10}},
   {key:'gpt-mini', name:'GPT Mini', provider:'openai', id:'gpt-5-mini', or:'openai/gpt-5-mini', kind:'text', cost:2, q:{chat:8,code:8,reasoning:8,writing:8,vision:8,long:7}},
   {key:'gpt', name:'GPT', provider:'openai', id:'gpt-5', or:'openai/gpt-5', kind:'text', cost:6, q:{chat:9,code:9,reasoning:10,writing:9,vision:9,long:8}},
   {key:'claude-haiku', name:'Claude Haiku', provider:'anthropic', id:'claude-haiku-5-5', or:'', kind:'text', cost:2, q:{chat:7,code:7,reasoning:6,writing:8,vision:7,long:7}},
   {key:'claude-sonnet', name:'Claude Sonnet', provider:'anthropic', id:'claude-sonnet-5-5', or:'', kind:'text', cost:6, q:{chat:9,code:10,reasoning:9,writing:10,vision:9,long:9}},
-  {key:'gemini-lite', name:'Gemini Flash-Lite', provider:'gemini', id:'gemini-2.5-flash-lite', or:'google/gemini-2.5-flash-lite', kind:'text', cost:0.5, q:{chat:7,code:5,reasoning:5,writing:6,vision:7,long:8}},
-  {key:'gemini-search', name:'Gemini + Google Search', provider:'gemini', id:'gemini-2.5-flash', or:'google/gemini-2.5-flash:online', kind:'text', search:true, cost:1.5, q:{search:8}},
+  {key:'gemini-lite', name:'Gemini Flash-Lite', provider:'gemini', id:'gemini-3.5-flash-lite', or:'google/gemini-3.5-flash-lite', kind:'text', cost:0.5, q:{chat:7,code:5,reasoning:5,writing:6,vision:7,long:8}},
+  {key:'gemini-search', name:'Gemini + Google Search', provider:'gemini', id:'gemini-3.6-flash', or:'google/gemini-3.6-flash:online', kind:'text', search:true, cost:1.5, q:{search:8}},
   {key:'claude-opus', name:'Claude Opus', provider:'anthropic', id:'claude-opus-5-5', or:'', kind:'text', cost:10, q:{chat:10,code:10,reasoning:10,writing:10,vision:9,long:9}},
   {key:'deepseek-chat', name:'DeepSeek Chat', provider:'deepseek', id:'deepseek-chat', or:'deepseek/deepseek-chat', kind:'text', cost:0.7, q:{chat:8,code:8,reasoning:7,writing:7,long:7}},
   {key:'deepseek-r', name:'DeepSeek Reasoner', provider:'deepseek', id:'deepseek-reasoner', or:'deepseek/deepseek-r1', kind:'text', cost:1.5, q:{chat:6,code:8,reasoning:9}},
@@ -337,8 +337,8 @@ const MODELS = [
   {key:'qwen-coder', name:'Qwen Coder', provider:'openrouter', id:'qwen/qwen3-coder', or:'qwen/qwen3-coder', kind:'text', cost:1, q:{code:8}},
   {key:'sonar', name:'Perplexity Sonar', provider:'perplexity', id:'sonar', or:'perplexity/sonar', kind:'text', cost:2, q:{search:9}},
   {key:'sonar-pro', name:'Perplexity Sonar Pro', provider:'perplexity', id:'sonar-pro', or:'perplexity/sonar-pro', kind:'text', cost:5, q:{search:10}},
-  {key:'imagen', name:'Imagen', provider:'gemini', id:'imagen-4.0-generate-001', or:'', kind:'image', cost:3, q:{image_gen:9}},
-  {key:'gemini-image', name:'Gemini Image', provider:'gemini', id:'gemini-2.5-flash-image', or:'google/gemini-2.5-flash-image', kind:'image', cost:2, q:{image_gen:8,image_edit:9}},
+  {key:'imagen', name:'Gemini Pro Image', provider:'gemini', id:'gemini-3-pro-image', or:'google/gemini-3-pro-image', kind:'image', cost:4, q:{image_gen:9,image_edit:9}},
+  {key:'gemini-image', name:'Gemini Image', provider:'gemini', id:'gemini-3.1-flash-image', or:'google/gemini-3.1-flash-image', kind:'image', cost:2, q:{image_gen:8,image_edit:9}},
   {key:'gpt-image', name:'GPT Image', provider:'openai', id:'gpt-image-1', or:'', kind:'image', cost:5, q:{image_gen:9,image_edit:7}}
 ];
 const PREF = {
@@ -407,7 +407,7 @@ function md(src){
 
 /* ========== Routing: which models are usable ========== */
 function routeOf(m){
-  if(settings.disabled[m.key]) return null;
+  if(settings.disabled[m.key] || badModels.has(m.key)) return null;
   const id = (settings.ids[m.key] || m.id).trim();
   if(serverProviders.includes(m.provider)) return {via:m.provider, id};
   const orId = (settings.orIds[m.key] !== undefined ? settings.orIds[m.key] : m.or).trim();
@@ -416,6 +416,10 @@ function routeOf(m){
 }
 
 /* ========== The Brain ========== */
+// models that answered "retired / no access / bad key" are skipped for the rest of the session
+const badModels = new Set();
+const MODEL_GONE = /no longer available|does not exist|not have access|model_not_found|invalid model|unknown model|is not found|not supported for|incorrect api key|invalid api key|api key not valid|permission denied/i;
+const MODEL_RETRY = /rate limit|overloaded|unavailable|timeout|timed out|\b(429|500|502|503|504)\b/i;
 const RX = {
   image_edit:/(عدل|عدّل|غير|غيّر|بدل|بدّل|احذف|شيل|أضف|اضف|ضيف|حسن|حسّن|لون|لوّن).{0,30}(الصورة|الصوره|الخلفية|الخلفيه|اللون|الشخص|السماء)|edit (the |this )?(image|photo)|remove (the )?background|change (the )?background/i,
   image_gen:/(صمم|صمّم|ارسم|ولد|ولّد|سوي|سوّي|اعمل|انشئ|أنشئ|اريد|أريد|ابي|أبي).{0,25}(صورة|صوره|شعار|لوغو|لوكو|لوجو|بوستر|رسمة|رسمه|غلاف|خلفية|خلفيه|ايقونة|أيقونة|ايقونه)|^\s*(ارسم|صمم|صمّم)|\b(draw|generate (an? )?(image|picture)|logo|poster|illustration|wallpaper)\b/i,
@@ -467,7 +471,10 @@ async function llmClassify(text, hasImg, hasPrevImg){
     if(j.task === 'vision' && !hasImg) j.task = 'chat';
     if(j.task === 'image_edit' && !hasImg && !hasPrevImg) j.task = 'image_gen';
     return {task:j.task, complexity:Math.max(1, Math.min(3, parseInt(j.complexity, 10) || 1)), reason:String(j.reason || '').slice(0, 120), by:cm.name};
-  }catch(e){ return null; }
+  }catch(e){
+    if(MODEL_GONE.test((e && e.message) || '')){ badModels.add(cm.key); return llmClassify(text, hasImg, hasPrevImg); }
+    return null;
+  }
 }
 function choose(task, complexity){
   const p = PREF[settings.pref] || PREF.balanced;
@@ -489,7 +496,7 @@ function choose(task, complexity){
   if(best.q === maxQ && best.m.cost === minCost) why = 'الأعلى جودة والأرخص معاً';
   else if(best.q === maxQ) why = 'الأعلى جودة لهذه المهمة';
   else if(best.m.cost === minCost) why = 'الأرخص بجودة كافية';
-  return {m:best.m, r:best.r, why, alts:cands.slice(1, 3).map(c => c.m.name)};
+  return {m:best.m, r:best.r, why, alts:cands.slice(1, 3).map(c => c.m.name), list:cands};
 }
 function noModelMsg(task){
   if(task === 'image_gen' || task === 'image_edit') return 'لا يوجد نموذج صور مفعّل على السيرفر حالياً.';
@@ -984,21 +991,32 @@ async function send(textOverride){
       if(!pick && task === 'image_edit') { task = 'image_gen'; pick = choose(task, complexity); }
       if(!pick) throw new Error(noModelMsg(task));
     }
-    const m = pick.m;
-    a.meta = {model:m.name, via:pick.r.via, task, complexity, reason, by, why:pick.why, alts:pick.alts};
-    a.pending = m.name + ' يعمل الآن…';
-    renderAll();
-    let res;
-    if(m.kind === 'image'){
-      const src = task === 'image_edit' ? (img || prevImg) : null;
-      const prompt = await enhancePrompt(text || 'حسّن هذه الصورة', !!src);
-      res = await genImage(m, prompt, src);
-    } else {
-      const hist = conv.msgs.filter(x => x !== a && !x.error && !x.pending).slice(-20).map((x, i, arr) => ({
-        role:x.role, text:x.text || (x.image && x.role === 'assistant' ? '[صورة تم توليدها]' : ''),
-        image:(i === arr.length - 1 && x.role === 'user') ? x.image : null
-      }));
-      res = await callText(m, hist, SYSTEM);
+    const queue = [pick].concat((pick.list || []).slice(1).map(c => ({m:c.m, r:c.r, why:'بديل تلقائي — النموذج الأفضل غير متاح حالياً', alts:[]})));
+    let res, imgPrompt = null;
+    for(let qi = 0; qi < Math.min(queue.length, 4); qi++){
+      const cand = queue[qi], m = cand.m;
+      a.meta = {model:m.name, via:cand.r.via, task, complexity, reason, by, why:cand.why || pick.why, alts:qi ? [] : pick.alts};
+      a.pending = m.name + ' يعمل الآن…';
+      renderAll();
+      try{
+        if(m.kind === 'image'){
+          const src = task === 'image_edit' ? (img || prevImg) : null;
+          if(imgPrompt === null) imgPrompt = await enhancePrompt(text || 'حسّن هذه الصورة', !!src);
+          res = await genImage(m, imgPrompt, src);
+        } else {
+          const hist = conv.msgs.filter(x => x !== a && !x.error && !x.pending).slice(-20).map((x, i, arr) => ({
+            role:x.role, text:x.text || (x.image && x.role === 'assistant' ? '[صورة تم توليدها]' : ''),
+            image:(i === arr.length - 1 && x.role === 'user') ? x.image : null
+          }));
+          res = await callText(m, hist, SYSTEM);
+        }
+        break;
+      }catch(err){
+        const msg = (err && err.message) || '';
+        const gone = MODEL_GONE.test(msg), retry = MODEL_RETRY.test(msg);
+        if(gone) badModels.add(m.key);
+        if(!(gone || retry) || qi >= Math.min(queue.length, 4) - 1) throw err;
+      }
     }
     a.text = res.text || '';
     a.image = res.image || null;
