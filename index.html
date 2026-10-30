@@ -304,7 +304,8 @@ const PROVIDERS = {
   mistral:{name:'Mistral', hint:'…'},
   groq:{name:'Groq (سريع جداً)', hint:'gsk_…'},
   perplexity:{name:'Perplexity (بحث)', hint:'pplx-…'},
-  openrouter:{name:'OpenRouter (مفتاح واحد للكل)', hint:'sk-or-…'}
+  openrouter:{name:'OpenRouter (مفتاح واحد للكل)', hint:'sk-or-…'},
+  huggingface:{name:'Hugging Face', hint:'hf_…'}
 };
 const COMPAT_URL = {
   openai:'https://api.openai.com/v1/chat/completions',
@@ -313,7 +314,8 @@ const COMPAT_URL = {
   xai:'https://api.x.ai/v1/chat/completions',
   mistral:'https://api.mistral.ai/v1/chat/completions',
   groq:'https://api.groq.com/openai/v1/chat/completions',
-  perplexity:'https://api.perplexity.ai/chat/completions'
+  perplexity:'https://api.perplexity.ai/chat/completions',
+  huggingface:'https://router.huggingface.co/v1/chat/completions'
 };
 const TASKS = {chat:'محادثة', code:'برمجة', reasoning:'تفكير ورياضيات', writing:'كتابة وترجمة', vision:'تحليل صورة', image_gen:'تصميم صورة', image_edit:'تعديل صورة', long:'نص طويل', search:'بحث ومعلومات حديثة'};
 // q = quality score per task (0-10), cost = relative cost (1 cheapest)
@@ -337,6 +339,10 @@ const MODELS = [
   {key:'qwen-coder', name:'Qwen Coder', provider:'openrouter', id:'qwen/qwen3-coder', or:'qwen/qwen3-coder', kind:'text', cost:1, q:{code:8}},
   {key:'sonar', name:'Perplexity Sonar', provider:'perplexity', id:'sonar', or:'perplexity/sonar', kind:'text', cost:2, q:{search:9}},
   {key:'sonar-pro', name:'Perplexity Sonar Pro', provider:'perplexity', id:'sonar-pro', or:'perplexity/sonar-pro', kind:'text', cost:5, q:{search:10}},
+  {key:'hf-deepseek', name:'DeepSeek V3 (HF)', provider:'huggingface', id:'deepseek-ai/DeepSeek-V3:cheapest', or:'', kind:'text', cost:0.8, q:{chat:8,code:8,reasoning:7,writing:7,long:7}},
+  {key:'hf-llama', name:'Llama 3.3 70B (HF)', provider:'huggingface', id:'meta-llama/Llama-3.3-70B-Instruct:fastest', or:'', kind:'text', cost:0.6, q:{chat:7,code:6,reasoning:6,writing:7,long:6}},
+  {key:'hf-qwen', name:'Qwen3 Coder (HF)', provider:'huggingface', id:'Qwen/Qwen3-Coder-480B-A35B-Instruct:fastest', or:'', kind:'text', cost:1, q:{code:8}},
+  {key:'hf-flux', name:'FLUX (HF)', provider:'huggingface', id:'black-forest-labs/FLUX.1-schnell', or:'', kind:'image', cost:1.5, q:{image_gen:8}},
   {key:'imagen', name:'Gemini Pro Image', provider:'gemini', id:'gemini-3-pro-image', or:'google/gemini-3-pro-image', kind:'image', cost:4, q:{image_gen:9,image_edit:9}},
   {key:'gemini-image', name:'Gemini Image', provider:'gemini', id:'gemini-3.1-flash-image', or:'google/gemini-3.1-flash-image', kind:'image', cost:2, q:{image_gen:8,image_edit:9}},
   {key:'gpt-image', name:'GPT Image', provider:'openai', id:'gpt-image-1', or:'', kind:'image', cost:5, q:{image_gen:9,image_edit:7}}
@@ -349,7 +355,7 @@ const PREF = {
 const SYSTEM = 'أنت Zigrax AI، مساعد ذكي ومحترف. أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
 
 /* ========== Auto-update: reload when a newer version is published ========== */
-const APP_VERSION = '2026.10.31-3';
+const APP_VERSION = '2026.10.31-4';
 (async () => {
   try{
     const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
@@ -630,6 +636,12 @@ async function callText(m, msgs, system, opt){
 async function genImage(m, prompt, src){
   const r = routeOf(m);
   if(!r) throw new Error('النموذج غير متاح: ' + m.name);
+  if(r.via === 'huggingface'){
+    const d = await proxy({via:'huggingface', op:'hf_image', model:r.id, body:{inputs:prompt}});
+    const it = (d.data || [])[0] || {};
+    if(!it.b64_json) throw new Error('لم تُرجع الصورة');
+    return {text:'', image:'data:' + (it.mime || 'image/png') + ';base64,' + it.b64_json};
+  }
   if(r.via === 'gemini' && /imagen/i.test(r.id)){
     const d = await proxy({via:'gemini', model:r.id, method:'predict', body:{instances:[{prompt}], parameters:{sampleCount:1}}});
     const p = (d.predictions || [])[0] || {};
@@ -1103,6 +1115,7 @@ function renderAll(){ renderChat(); renderList(); renderBar(); renderUsage(); }
 // detect provider from the key's prefix (Groq "gsk_" vs Grok "xai-" are easy to mix up)
 function keyProvider(k){
   if(/^gsk_/.test(k)) return 'groq';
+  if(/^hf_/.test(k)) return 'huggingface';
   if(/^xai-/.test(k)) return 'xai';
   if(/^sk-ant-/.test(k)) return 'anthropic';
   if(/^sk-or-/.test(k)) return 'openrouter';
