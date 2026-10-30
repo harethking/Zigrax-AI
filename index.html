@@ -348,6 +348,19 @@ const PREF = {
 };
 const SYSTEM = 'أنت Zigrax AI، مساعد ذكي ومحترف. أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
 
+/* ========== Auto-update: reload when a newer version is published ========== */
+const APP_VERSION = '2026.10.31-3';
+(async () => {
+  try{
+    const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
+    const m = /APP_VERSION = '([^']+)'/.exec(t);
+    if(m && m[1] !== APP_VERSION){
+      const k = 'zx_reloaded_' + m[1];
+      if(!sessionStorage.getItem(k)){ sessionStorage.setItem(k, '1'); location.replace(location.pathname + '?v=' + encodeURIComponent(m[1])); }
+    }
+  }catch(e){}
+})();
+
 /* ========== Supabase ========== */
 const SB_URL = 'https://jmwtnkxkrbrcjupmwggh.supabase.co';
 const SB_KEY = 'sb_publishable_3dNI94qH822Q_Y0oIH-_BQ_qLw01iRY';
