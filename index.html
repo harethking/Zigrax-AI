@@ -355,7 +355,7 @@ const PREF = {
 const SYSTEM = 'أنت Zigrax AI (زيكراكس)، مساعد ذكاء اصطناعي من تطوير Zigrax. هويتك الوحيدة هي Zigrax AI. إذا سألك المستخدم عن اسمك أو من أنت أو أي نموذج أو شركة أو تقنية تستخدم أو من طوّرك، أجب فقط بأنك Zigrax AI من تطوير Zigrax، ولا تكشف أسماء أي نماذج أو شركات ذكاء اصطناعي أخرى (مثل GPT أو OpenAI أو Gemini أو Google أو Claude أو Anthropic أو Llama أو Meta أو DeepSeek أو Qwen أو Mistral أو Grok أو xAI). أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
 
 /* ========== Auto-update: reload when a newer version is published ========== */
-const APP_VERSION = '2026.10.31-5';
+const APP_VERSION = '2026.10.31-6';
 (async () => {
   try{
     const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
@@ -426,7 +426,7 @@ function md(src){
 
 /* ========== Routing: which models are usable ========== */
 function routeOf(m){
-  if(settings.disabled[m.key] || badModels.has(m.key)) return null;
+  if(settings.disabled[m.key] || badModels.has(m.key) || badProviders.has(m.provider)) return null;
   const id = (settings.ids[m.key] || m.id).trim();
   if(serverProviders.includes(m.provider)) return {via:m.provider, id};
   const orId = (settings.orIds[m.key] !== undefined ? settings.orIds[m.key] : m.or).trim();
@@ -436,9 +436,16 @@ function routeOf(m){
 
 /* ========== The Brain ========== */
 // models that answered "retired / no access / bad key" are skipped for the rest of the session
-const badModels = new Set();
-const MODEL_GONE = /no longer available|does not exist|not have access|model_not_found|invalid model|unknown model|is not found|not supported for|incorrect api key|invalid api key|api key not valid|permission denied/i;
+const badModels = new Set(), badProviders = new Set();
+const MODEL_GONE = /no longer available|does not exist|not have access|model_not_found|invalid model|unknown model|is not found|not supported for|deprecated|^\s*(404|410)\b/i;
+// whole provider unusable: bad key, no credit, billing
+const PROVIDER_DEAD = /incorrect api key|invalid api key|api key not valid|unauthorized|permission denied|no remaining credits|insufficient (credit|balance|funds|quota)|purchase pre-paid|billing|payment required|exceeded your current quota|^\s*(401|402|403)\b/i;
 const MODEL_RETRY = /rate limit|overloaded|unavailable|timeout|timed out|\b(429|500|502|503|504)\b/i;
+function markBad(m, msg){
+  if(PROVIDER_DEAD.test(msg)){ badProviders.add(m.provider); return true; }
+  if(MODEL_GONE.test(msg)){ badModels.add(m.key); return true; }
+  return false;
+}
 const RX = {
   image_edit:/(عدل|عدّل|غير|غيّر|بدل|بدّل|احذف|شيل|أضف|اضف|ضيف|حسن|حسّن|لون|لوّن).{0,30}(الصورة|الصوره|الخلفية|الخلفيه|اللون|الشخص|السماء)|edit (the |this )?(image|photo)|remove (the )?background|change (the )?background/i,
   image_gen:/(صمم|صمّم|ارسم|ولد|ولّد|سوي|سوّي|اعمل|انشئ|أنشئ|اريد|أريد|ابي|أبي).{0,25}(صورة|صوره|شعار|لوغو|لوكو|لوجو|بوستر|رسمة|رسمه|غلاف|خلفية|خلفيه|ايقونة|أيقونة|ايقونه)|^\s*(ارسم|صمم|صمّم)|\b(draw|generate (an? )?(image|picture)|logo|poster|illustration|wallpaper)\b/i,
@@ -491,7 +498,7 @@ async function llmClassify(text, hasImg, hasPrevImg){
     if(j.task === 'image_edit' && !hasImg && !hasPrevImg) j.task = 'image_gen';
     return {task:j.task, complexity:Math.max(1, Math.min(3, parseInt(j.complexity, 10) || 1)), reason:String(j.reason || '').slice(0, 120), by:cm.name};
   }catch(e){
-    if(MODEL_GONE.test((e && e.message) || '')){ badModels.add(cm.key); return llmClassify(text, hasImg, hasPrevImg); }
+    if(markBad(cm, (e && e.message) || '')) return llmClassify(text, hasImg, hasPrevImg);
     return null;
   }
 }
@@ -984,6 +991,7 @@ async function send(textOverride){
   const text = (textOverride != null ? textOverride : $('#inp').value).trim();
   const img = pendingImg;
   if(!text && !img) return;
+  if(!serverProviders.length) await fetchProviders();
   const qt = quota();
   if(!qt.ok){ renderUsage(); toast('خلصت حصة ' + qt.block.lvl + ' — انتظر ' + dur(qt.block.until - Date.now())); return; }
   turnTokens = 0;
@@ -1017,9 +1025,11 @@ async function send(textOverride){
       if(!pick) throw new Error(noModelMsg(task));
     }
     const queue = [pick].concat((pick.list || []).slice(1).map(c => ({m:c.m, r:c.r, why:'بديل تلقائي — النموذج الأفضل غير متاح حالياً', alts:[]})));
-    let res, imgPrompt = null;
-    for(let qi = 0; qi < Math.min(queue.length, 4); qi++){
+    let res, imgPrompt = null, tries = 0, lastErr = null;
+    for(let qi = 0; qi < queue.length && tries < 5; qi++){
       const cand = queue[qi], m = cand.m;
+      if(qi > 0 && !routeOf(m)) continue;     // provider/model marked unusable meanwhile
+      tries++;
       a.meta = {model:m.name, via:cand.r.via, task, complexity, reason, by, why:cand.why || pick.why, alts:qi ? [] : pick.alts};
       a.pending = isAdmin() ? m.name + ' يعمل الآن…' : 'Zigrax AI يفكّر…';
       renderAll();
@@ -1038,11 +1048,12 @@ async function send(textOverride){
         break;
       }catch(err){
         const msg = (err && err.message) || '';
-        const gone = MODEL_GONE.test(msg), retry = MODEL_RETRY.test(msg);
-        if(gone) badModels.add(m.key);
-        if(!(gone || retry) || qi >= Math.min(queue.length, 4) - 1) throw err;
+        const gone = markBad(m, msg), retry = MODEL_RETRY.test(msg);
+        lastErr = err;
+        if(!(gone || retry)) throw err;
       }
     }
+    if(!res) throw lastErr || new Error(noModelMsg(task));
     a.text = res.text || '';
     a.image = res.image || null;
   }catch(e){
