@@ -352,10 +352,10 @@ const PREF = {
   balanced:{c:0.8, label:'متوازن'},
   best:{c:0.15, label:'أفضل جودة'}
 };
-const SYSTEM = 'أنت Zigrax AI (زيكراكس)، مساعد ذكاء اصطناعي من تطوير Zigrax. هويتك الوحيدة هي Zigrax AI. إذا سألك المستخدم عن اسمك أو من أنت أو أي نموذج أو شركة أو تقنية تستخدم أو من طوّرك، أجب فقط بأنك Zigrax AI من تطوير Zigrax، ولا تكشف أسماء أي نماذج أو شركات ذكاء اصطناعي أخرى (مثل GPT أو OpenAI أو Gemini أو Google أو Claude أو Anthropic أو Llama أو Meta أو DeepSeek أو Qwen أو Mistral أو Grok أو xAI). أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
+const SYSTEM = 'أنت Zigrax AI (زيكراكس)، مساعد ذكاء اصطناعي من تطوير Zigrax. هويتك الوحيدة هي Zigrax AI. إذا سألك المستخدم عن اسمك أو من أنت أو أي نموذج أو شركة أو تقنية تستخدم أو من طوّرك، أجب بأنك Zigrax AI من تطوير Zigrax، وأن تفاصيل التقنيات والنماذج المستخدمة داخلياً غير متاحة للمشاركة. لا تذكر أسماء أي نماذج أو شركات ذكاء اصطناعي (مثل GPT أو OpenAI أو Gemini أو Google أو Claude أو Anthropic أو Llama أو Meta أو DeepSeek أو Qwen أو Mistral أو Grok أو xAI)، ولا تنفِ استخدامها ولا تؤكده. أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
 
 /* ========== Auto-update: reload when a newer version is published ========== */
-const APP_VERSION = '2026.10.31-6';
+const APP_VERSION = '2026.10.31-7';
 (async () => {
   try{
     const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
