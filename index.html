@@ -220,6 +220,10 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
     <h3>🔑 مفاتيح API</h3>
     <p class="s">محفوظة بقاعدة البيانات ولا يقدر يشوفها غير الأدمن. اترك الخانة فارغة حتى يبقى المفتاح الحالي، أو اضغط 🗑 لحذفه.</p>
     <div id="keyRows"></div>
+    <h3>💰 الصرف والأرباح (هذا الشهر)</h3>
+    <div id="finBox" class="hint">جارٍ التحميل…</div>
+    <div class="krow" style="margin-top:8px"><label>سعر الدولار (دينار)</label><input class="in" id="usdIqd" type="number" min="500" step="10"><span></span></div>
+    <div class="krow"><label>ميزانية المجاني الشهرية ($)</label><input class="in" id="freeBudget" type="number" min="0" step="0.5"><span></span></div>
     <h3>🧠 العقل الذكي</h3>
     <label class="sw"><input type="checkbox" id="smartChk"> تحليل الطلب بنموذج اقتصادي (أدق من القواعد السريعة)</label>
     <label class="sw"><input type="checkbox" id="enhChk"> تحسين وصف الصور تلقائياً قبل التصميم</label>
@@ -343,7 +347,7 @@ const MODELS = [
   {key:'gemini-pro', name:'Gemini 4', provider:'gemini', id:'gemini-4-argon', or:'google/gemini-4-argon', kind:'text', cost:4, q:{chat:9,code:9,reasoning:9,writing:8,vision:9,long:10}},
   {key:'gpt-mini', name:'GPT Mini', provider:'openai', id:'gpt-5-mini', or:'openai/gpt-5-mini', kind:'text', cost:2, q:{chat:8,code:8,reasoning:8,writing:8,vision:8,long:7}},
   {key:'gpt', name:'GPT', provider:'openai', id:'gpt-5', or:'openai/gpt-5', kind:'text', cost:6, q:{chat:9,code:9,reasoning:10,writing:9,vision:9,long:8}},
-  {key:'claude-haiku', name:'Claude Haiku', provider:'anthropic', id:'claude-haiku-5-5', or:'', kind:'text', cost:2, q:{chat:7,code:7,reasoning:6,writing:8,vision:7,long:7}},
+  {key:'claude-haiku', name:'Claude Haiku', provider:'anthropic', id:'claude-haiku-5-5', or:'', kind:'text', cost:2, q:{chat:8,code:8,reasoning:7,writing:8,vision:8,long:8}},
   {key:'claude-sonnet', name:'Claude Sonnet', provider:'anthropic', id:'claude-sonnet-5-5', or:'', kind:'text', cost:6, q:{chat:9,code:10,reasoning:9,writing:10,vision:9,long:9}},
   {key:'gemini-lite', name:'Gemini Flash-Lite', provider:'gemini', id:'gemini-3.5-flash-lite', or:'google/gemini-3.5-flash-lite', kind:'text', cost:0.5, q:{chat:7,code:5,reasoning:5,writing:6,vision:7,long:8}},
   {key:'gemini-search', name:'Gemini + Google Search', provider:'gemini', id:'gemini-3.6-flash', or:'google/gemini-3.6-flash:online', kind:'text', search:true, cost:1.5, q:{search:8}},
@@ -366,6 +370,47 @@ const MODELS = [
   {key:'gemini-image', name:'Gemini Image', provider:'gemini', id:'gemini-3.1-flash-image', or:'google/gemini-3.1-flash-image', kind:'image', cost:2, q:{image_gen:8,image_edit:9}},
   {key:'gpt-image', name:'GPT Image', provider:'openai', id:'gpt-image-1', or:'', kind:'image', cost:5, q:{image_gen:9,image_edit:7}}
 ];
+// real prices ($ per 1M tokens in/out, flat $ per image) — keep in sync with the server
+const PRICE_TABLE = [
+  [/pro-image/i, {i:2, o:0, flat:0.15, tier:'pro'}],
+  [/flash-lite-image/i, {i:0.5, o:0, flat:0.05, tier:'mid'}],
+  [/flash-image|nano-banana/i, {i:0.5, o:0, flat:0.07, tier:'mid'}],
+  [/gpt-image|dall-e/i, {i:5, o:0, flat:0.2, tier:'pro'}],
+  [/flux/i, {i:0, o:0, flat:0.03, tier:'mid'}],
+  [/gpt-oss/i, {i:0.3, o:1, tier:'eco'}],
+  [/flash-lite/i, {i:0.3, o:2.5, tier:'eco'}],
+  [/gemini-4|argon|gemini-[\d.]+-pro/i, {i:4, o:20, tier:'pro'}],
+  [/gemini.*flash/i, {i:1.5, o:7.5, tier:'mid'}],
+  [/haiku/i, {i:0.1, o:0.5, tier:'eco'}],
+  [/sonnet/i, {i:2, o:10, tier:'pro'}],
+  [/opus/i, {i:4, o:20, tier:'pro'}],
+  [/gpt-[\d.]+-mini|gpt-.*-mini/i, {i:0.5, o:4, tier:'mid'}],
+  [/^gpt-|^o\d/i, {i:2.5, o:20, tier:'pro'}],
+  [/deepseek-reasoner|deepseek-r1/i, {i:0.6, o:2.5, tier:'eco'}],
+  [/deepseek/i, {i:1, o:3, tier:'eco'}],
+  [/grok.*mini/i, {i:0.5, o:1, tier:'eco'}],
+  [/grok/i, {i:3, o:15, tier:'pro'}],
+  [/codestral/i, {i:0.5, o:1.5, tier:'eco'}],
+  [/mistral/i, {i:2, o:6, tier:'mid'}],
+  [/sonar-pro/i, {i:3, o:15, req:0.014, tier:'pro'}],
+  [/sonar/i, {i:1, o:1, req:0.012, tier:'mid'}],
+  [/llama/i, {i:1, o:1, tier:'eco'}],
+  [/qwen/i, {i:2, o:2, tier:'mid'}],
+];
+const priceOf = id => (PRICE_TABLE.find(([re]) => re.test(id)) || [null, {i:5, o:25, tier:'pro'}])[1];
+const TIER_RANK = {eco:1, mid:2, pro:3}, PLAN_RANK = {free:1, normal:2, pro:3};
+// routing cost score from a typical request (1,500 in / 400 out tokens) or the per-image price
+function applyPrices(){
+  MODELS.forEach(m => {
+    let ids = {};
+    try{ ids = (settings && settings.ids) || {}; }catch(e){}
+    const id = ids[m.key] || m.id;
+    const p = priceOf(id);
+    m.tier = p.tier;
+    m.cost = p.flat ? Math.min(12, Math.max(0.5, p.flat * 40)) : Math.min(12, Math.max(0.3, ((1500 * p.i + 400 * p.o) / 1900 + (p.req || 0) * 300) * 1.5));
+  });
+}
+applyPrices();
 const PREF = {
   economy:{c:2.2, label:'اقتصادي'},
   balanced:{c:0.8, label:'متوازن'},
@@ -450,7 +495,7 @@ document.addEventListener('click', e => {
 });
 
 /* ========== Auto-update: reload when a newer version is published ========== */
-const APP_VERSION = '2026.10.31-9';
+const APP_VERSION = '2026.10.31-10';
 (async () => {
   try{
     const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
@@ -522,6 +567,7 @@ function md(src){
 /* ========== Routing: which models are usable ========== */
 function routeOf(m){
   if(settings.disabled[m.key] || badModels.has(m.key) || badProviders.has(m.provider)) return null;
+  if(quotaState && !isAdmin() && TIER_RANK[m.tier] > (PLAN_RANK[quotaState.plan] || 1)) return null;
   const id = (settings.ids[m.key] || m.id).trim();
   if(serverProviders.includes(m.provider)) return {via:m.provider, id};
   const orId = (settings.orIds[m.key] !== undefined ? settings.orIds[m.key] : m.or).trim();
@@ -532,7 +578,7 @@ function routeOf(m){
 /* ========== The Brain ========== */
 // models that answered "retired / no access / bad key" are skipped for the rest of the session
 const badModels = new Set(), badProviders = new Set();
-const MODEL_GONE = /no longer available|does not exist|not have access|model_not_found|invalid model|unknown model|is not found|not supported for|deprecated|^\s*(404|410)\b/i;
+const MODEL_GONE = /TIER_LOCKED|no longer available|does not exist|not have access|model_not_found|invalid model|unknown model|is not found|not supported for|deprecated|^\s*(404|410)\b/i;
 // whole provider unusable: bad key, no credit, billing
 const PROVIDER_DEAD = /incorrect api key|invalid api key|api key not valid|unauthorized|permission denied|no remaining credits|insufficient (credit|balance|funds|quota)|purchase pre-paid|billing|payment required|exceeded your current quota|^\s*(401|402|403)\b/i;
 const MODEL_RETRY = /rate limit|overloaded|unavailable|timeout|timed out|\b(429|500|502|503|504)\b/i;
@@ -598,7 +644,9 @@ async function llmClassify(text, hasImg, hasPrevImg){
   }
 }
 function choose(task, complexity){
-  const p = PREF[settings.pref] || PREF.balanced;
+  // pro subscribers: medium/hard tasks go to the strongest engines (real-cost billing keeps it profitable)
+  const proBoost = !isAdmin() && quotaState && quotaState.plan === 'pro' && complexity >= 2;
+  const p = PREF[proBoost ? 'best' : settings.pref] || PREF.balanced;
   const qw = 0.7 + 0.3 * complexity;
   const cands = [];
   for(const m of MODELS){
@@ -620,6 +668,7 @@ function choose(task, complexity){
   return {m:best.m, r:best.r, why, alts:cands.slice(1, 3).map(c => c.m.name), list:cands};
 }
 function noModelMsg(task){
+  if((task === 'image_gen' || task === 'image_edit') && !isAdmin() && quotaState && quotaState.plan === 'free') return 'تصميم الصور متاح في باقة العادي وبرو ⭐ — اضغط على زر الاشتراك فوق للترقية.';
   if(task === 'image_gen' || task === 'image_edit') return 'لا يوجد نموذج صور مفعّل على السيرفر حالياً.';
   return 'لا يوجد نموذج مفعّل على السيرفر حالياً — تواصل مع الإدارة.';
 }
@@ -641,6 +690,8 @@ async function proxy(payload){
     throw new Error('خلصت حصة ' + LVL[(d.quota.block || {}).lvl] + ' — تقدر تستخدم بعد ' + dur(Date.parse((d.quota.block || {}).until) - Date.now()));
   }
   if(res.status === 401){ showAuth(); throw new Error('انتهت الجلسة — سجّل الدخول من جديد'); }
+  if(d.error && d.error.code === 'FREE_BUDGET') throw new Error(d.error.message);
+  if(d.error && d.error.code === 'TIER') throw new Error('TIER_LOCKED: ' + d.error.message);
   if(!res.ok){
     const e = d.error ? (d.error.message || d.error) : (d.raw || res.statusText);
     throw new Error(res.status + ': ' + (typeof e === 'string' ? e : JSON.stringify(e)).slice(0, 400));
@@ -849,6 +900,11 @@ async function activate(code){
 }
 function openPlans(){
   const qs = quotaState || {plan:'free'};
+  const PERKS = {
+    free:['محادثة وكتابة وبرمجة بمحرّكات اقتصادية سريعة'],
+    normal:['كل مزايا المجاني', 'تصميم الصور وتعديلها 🎨', 'محرّكات متقدمة للمهام الأصعب'],
+    pro:['كل مزايا العادي', 'أقوى محرّكات الذكاء الاصطناعي للمهام المعقدة 🏆', 'العقل الذكي يختار الأقوى عند الحاجة']
+  };
   $('#planCards').innerHTML = Object.keys(PLANS).map(id => {
     const P = PLANS[id], L = limitsOf(id);
     let foot = '';
@@ -857,7 +913,7 @@ function openPlans(){
     return '<div class="pc' + (id === qs.plan ? ' on' : '') + (id === 'pro' ? ' pro' : '') + '"><div class="pn">' + P.name + '</div>' +
       '<div class="pp">' + (P.price ? fmt(P.price) + ' <small>د.ع / شهر</small>' : 'مجاناً') + '</div>' +
       '<div class="pt">' + fmt(P.tokens) + ' توكن شهرياً</div>' +
-      '<ul><li>الأسبوع: ' + fmt(L.W) + '</li><li>اليوم: ' + fmt(L.D) + '</li><li>كل فترة 6 ساعات: ' + fmt(L.P) + '</li></ul>' + foot + '</div>';
+      '<ul>' + PERKS[id].map(x => '<li>✓ ' + x + '</li>').join('') + '<li>الأسبوع: ' + fmt(L.W) + ' · اليوم: ' + fmt(L.D) + '</li><li>كل فترة 6 ساعات: ' + fmt(L.P) + '</li></ul>' + foot + '</div>';
   }).join('');
   $('#buyBox').style.display = 'none';
   $('#plansModal').classList.add('on');
@@ -953,19 +1009,26 @@ async function fetchProviders(){
 // ===== Roles: admin sees models/keys; users only chat =====
 let appCfg = null;
 const isAdmin = () => !!(quotaState && quotaState.role === 'admin');
+// pro subscribers get the balanced mode (strong engines for hard tasks); others stay economical
+function planPref(){
+  const plan = quotaState ? quotaState.plan : 'free';
+  if(plan === 'pro') return 'balanced';
+  return (appCfg && appCfg.default_pref === 'best') ? 'balanced' : 'economy';
+}
 async function loadAppSettings(){
-  const { data, error } = await sb.from('app_settings').select('models, default_pref, smart, enhance').eq('id', 1).maybeSingle();
+  const { data, error } = await sb.from('app_settings').select('models, default_pref, smart, enhance, usd_iqd, free_budget_usd').eq('id', 1).maybeSingle();
   if(error || !data) return;
   appCfg = data;
   const mc = data.models || {};
   settings.ids = mc.ids || {}; settings.orIds = mc.orIds || {}; settings.disabled = mc.disabled || {};
   settings.smart = data.smart !== false; settings.enhance = data.enhance !== false;
-  if(!isAdmin()){ settings.pref = data.default_pref || 'balanced'; settings.mode = 'auto'; }
+  applyPrices();
+  if(!isAdmin()){ settings.pref = planPref(); settings.mode = 'auto'; }
 }
 function applyRoleUI(){
   const a = isAdmin();
   ['#setBtn', '#modeSel', '#prefSeg', '#brainHint'].forEach(sel => { $(sel).style.display = a ? '' : 'none'; });
-  if(!a){ settings.mode = 'auto'; if(appCfg) settings.pref = appCfg.default_pref || 'balanced'; }
+  if(!a){ settings.mode = 'auto'; settings.pref = planPref(); }
 }
 function leaveApp(){
   me = null; quotaState = null; serverProviders = []; appCfg = null;
@@ -1249,7 +1312,10 @@ async function openSettings(){
   }).join('');
   $('#smartChk').checked = !!settings.smart;
   $('#enhChk').checked = !!settings.enhance;
-  $('#defPref').value = (appCfg && appCfg.default_pref) || 'balanced';
+  $('#defPref').value = (appCfg && appCfg.default_pref) || 'economy';
+  $('#usdIqd').value = (appCfg && appCfg.usd_iqd) || 1500;
+  $('#freeBudget').value = appCfg && appCfg.free_budget_usd != null ? appCfg.free_budget_usd : 5;
+  loadFinance();
   $('#modelRows').innerHTML = MODELS.map(m => {
     const r = routeOf(m);
     const st = r ? (r.via === 'openrouter' ? '<span class="tag o">عبر OpenRouter</span>' : '<span class="tag y">جاهز</span>') : '<span class="tag">بدون مفتاح</span>';
@@ -1260,6 +1326,25 @@ async function openSettings(){
       '<td>' + st + '</td></tr>';
   }).join('');
   $('#setModal').classList.add('on');
+}
+async function loadFinance(){
+  const box = $('#finBox');
+  const { data:f, error } = await sb.rpc('admin_finance');
+  if(error || !f){ box.textContent = 'تعذّر تحميل التقرير'; return; }
+  const usd = n => '$' + Number(n || 0).toFixed(2);
+  const revUsd = Number(f.revenue_iqd || 0) / Number(f.usd_iqd || 1500);
+  const profit = revUsd - Number(f.cost_total || 0);
+  const paid = f.paid_active || {};
+  const byP = f.cost_by_provider || {};
+  box.innerHTML =
+    '<table class="mt"><tbody>' +
+    '<tr><td>الإيراد (أكواد مفعّلة هذا الشهر)</td><td><b>' + fmt(f.revenue_iqd) + ' د.ع</b> (' + usd(revUsd) + ')</td></tr>' +
+    '<tr><td>الصرف الفعلي على المزوّدين</td><td><b>' + usd(f.cost_total) + '</b> · ' + fmt(f.requests) + ' طلب</td></tr>' +
+    '<tr><td>صافي الربح</td><td><b style="color:' + (profit >= 0 ? 'var(--ok)' : 'var(--err)') + '">' + usd(profit) + '</b></td></tr>' +
+    '<tr><td>المشتركون الفعّالون</td><td>العادي: ' + (paid.normal || 0) + ' · برو: ' + (paid.pro || 0) + ' · كل المستخدمين: ' + fmt(f.users_total) + '</td></tr>' +
+    '<tr><td>ميزانية المجاني</td><td>' + usd(f.free_spent) + ' من ' + usd(f.free_budget) + '</td></tr>' +
+    '<tr><td>الصرف حسب المزوّد</td><td>' + (Object.keys(byP).map(k => (PROVIDERS[k] ? PROVIDERS[k].name : k) + ': ' + usd(byP[k])).join(' · ') || '—') + '</td></tr>' +
+    '</tbody></table>';
 }
 async function saveSettingsFromModal(){
   if(!isAdmin()) return;
@@ -1274,7 +1359,7 @@ async function saveSettingsFromModal(){
   });
   const btn = $('#setSave'); btn.disabled = true;
   try{
-    const cfg = {models, smart:$('#smartChk').checked, enhance:$('#enhChk').checked, default_pref:$('#defPref').value, updated_at:new Date().toISOString()};
+    const cfg = {models, smart:$('#smartChk').checked, enhance:$('#enhChk').checked, default_pref:$('#defPref').value, usd_iqd:Math.max(500, Number($('#usdIqd').value) || 1500), free_budget_usd:Math.max(0, Number($('#freeBudget').value) || 0), updated_at:new Date().toISOString()};
     const r1 = await sb.from('app_settings').update(cfg).eq('id', 1);
     if(r1.error) throw r1.error;
     const ups = [], moved = [];
