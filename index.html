@@ -352,10 +352,10 @@ const PREF = {
   balanced:{c:0.8, label:'متوازن'},
   best:{c:0.15, label:'أفضل جودة'}
 };
-const SYSTEM = 'أنت Zigrax AI، مساعد ذكي ومحترف. أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
+const SYSTEM = 'أنت Zigrax AI (زيكراكس)، مساعد ذكاء اصطناعي من تطوير Zigrax. هويتك الوحيدة هي Zigrax AI. إذا سألك المستخدم عن اسمك أو من أنت أو أي نموذج أو شركة أو تقنية تستخدم أو من طوّرك، أجب فقط بأنك Zigrax AI من تطوير Zigrax، ولا تكشف أسماء أي نماذج أو شركات ذكاء اصطناعي أخرى (مثل GPT أو OpenAI أو Gemini أو Google أو Claude أو Anthropic أو Llama أو Meta أو DeepSeek أو Qwen أو Mistral أو Grok أو xAI). أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
 
 /* ========== Auto-update: reload when a newer version is published ========== */
-const APP_VERSION = '2026.10.31-4';
+const APP_VERSION = '2026.10.31-5';
 (async () => {
   try{
     const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
@@ -470,7 +470,7 @@ function heuristic(text, hasImg, hasPrevImg){
   return {task, complexity:complexityOf(t), reason, by:'قواعد سريعة'};
 }
 function cheapModel(){
-  return ['gemini-flash', 'gemini-lite', 'gpt-mini', 'deepseek-chat', 'groq-llama', 'claude-haiku', 'grok-mini'].map(k => MODELS.find(m => m.key === k)).find(m => routeOf(m)) || null;
+  return ['gemini-lite', 'groq-llama', 'hf-deepseek', 'deepseek-chat', 'gemini-flash', 'gpt-mini', 'claude-haiku', 'grok-mini'].map(k => MODELS.find(m => m.key === k)).find(m => routeOf(m)) || null;
 }
 async function llmClassify(text, hasImg, hasPrevImg){
   const cm = cheapModel();
@@ -1021,7 +1021,7 @@ async function send(textOverride){
     for(let qi = 0; qi < Math.min(queue.length, 4); qi++){
       const cand = queue[qi], m = cand.m;
       a.meta = {model:m.name, via:cand.r.via, task, complexity, reason, by, why:cand.why || pick.why, alts:qi ? [] : pick.alts};
-      a.pending = m.name + ' يعمل الآن…';
+      a.pending = isAdmin() ? m.name + ' يعمل الآن…' : 'Zigrax AI يفكّر…';
       renderAll();
       try{
         if(m.kind === 'image'){
@@ -1086,7 +1086,7 @@ function renderChat(){
       h += '<div class="why">🧠 ' + esc(x.meta.why) + (x.meta.reason ? ' — ' + esc(x.meta.reason) : '') + ' <span style="opacity:.7">(تحليل: ' + esc(x.meta.by) + (x.meta.alts && x.meta.alts.length ? ' · بدائل: ' + esc(x.meta.alts.join('، ')) : '') + ')</span></div>';
     }
     if(x.pending) h += '<div class="pending"><span class="dot"></span>' + esc(x.pending) + '</div>';
-    if(x.error) h += '<div class="err">⚠️ ' + esc(x.error) + '</div>';
+    if(x.error) h += '<div class="err">⚠️ ' + esc(!isAdmin() && /[A-Za-z]{4,}/.test(x.error) ? 'تعذّر الرد حالياً — حاول مرة ثانية بعد قليل' : x.error) + '</div>';
     if(x.image) h += '<img class="gen" src="' + esc(x.image) + '" alt=""><a class="dl" href="' + esc(x.image) + '" download="zigrax-ai.png">⬇️ تحميل الصورة</a>';
     if(x.imgDropped) h += '<div class="hint">(حُذفت الصورة لتوفير المساحة)</div>';
     if(x.text) h += md(x.text);
