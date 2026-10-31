@@ -152,6 +152,14 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
 .anote b{color:var(--text)}
 .aerr{display:none;margin-top:12px;font-size:13px;border-radius:10px;padding:8px 12px;background:rgba(239,68,68,.1);border:1px solid #5b2330;color:#fca5a5}
 .aerr.ok{background:rgba(34,197,94,.1);border-color:#1f5131;color:#86efac}
+.agree{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted);line-height:1.7}
+.agree input{margin-top:4px;flex:none}
+.agree a,.disc a,.legal-links a{color:var(--acc2);cursor:pointer;text-decoration:underline}
+.disc{max-width:820px;margin:6px auto 0;text-align:center;font-size:11.5px;color:var(--muted)}
+.legal-links{text-align:center;font-size:12px;margin-top:14px;color:var(--muted)}
+.legal h3{margin:14px 0 6px;color:var(--acc2);font-size:14px}
+.legal p,.legal li{font-size:13px;line-height:1.9;color:var(--text)}
+.legal ul{padding-right:18px;margin:4px 0}
 #menuBtn{display:none}
 @media (max-width:760px){
   #drawer{position:fixed;top:0;bottom:0;right:0;z-index:15;transform:translateX(100%);transition:.25s;width:270px}
@@ -200,6 +208,7 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
         <textarea id="inp" rows="1" placeholder="اكتب طلبك… والعقل يختار أفضل نموذج"></textarea>
         <button class="send" id="sendBtn">إرسال</button>
       </div>
+      <div class="disc">قد يخطئ Zigrax AI، فتحقّق من المعلومات المهمة. لا تشارك معلومات شخصية أو حساسة. · <a data-legal="terms">الشروط</a> · <a data-legal="privacy">الخصوصية</a></div>
     </footer>
   </section>
 </main>
@@ -226,6 +235,14 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
     </div>
   </div>
 </div>
+<div class="modal" id="legalModal" style="z-index:50">
+  <div class="mbox legal">
+    <h2 id="legalTitle"></h2>
+    <div id="legalBody"></div>
+    <div class="mfoot"><span class="hint" id="legalDate"></span><button class="btn p" id="legalClose">فهمت</button></div>
+  </div>
+</div>
+
 <div class="modal" id="plansModal">
   <div class="mbox">
     <h2>⭐ الاشتراكات</h2>
@@ -259,6 +276,7 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
       <input class="in" id="sPass" type="password" autocomplete="new-password">
       <label>تأكيد كلمة المرور</label>
       <input class="in" id="sPass2" type="password" autocomplete="new-password">
+      <label class="agree"><input type="checkbox" id="sAgree"> <span>أقرّ بأن عمري <b>18 سنة أو أكثر</b>، وأوافق على <a data-legal="terms">شروط الاستخدام</a> و<a data-legal="privacy">سياسة الخصوصية</a>.</span></label>
       <button class="go" type="submit">إنشاء الحساب وإرسال رمز التأكيد</button>
     </form>
 
@@ -288,6 +306,7 @@ table.mt{width:100%;border-collapse:collapse;font-size:12.5px}
     </form>
 
     <div class="aerr" id="aerr"></div>
+    <div class="legal-links"><a data-legal="terms">شروط الاستخدام</a> · <a data-legal="privacy">سياسة الخصوصية</a></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -354,8 +373,84 @@ const PREF = {
 };
 const SYSTEM = 'أنت Zigrax AI (زيكراكس)، مساعد ذكاء اصطناعي من تطوير Zigrax. هويتك الوحيدة هي Zigrax AI. إذا سألك المستخدم عن اسمك أو من أنت أو أي نموذج أو شركة أو تقنية تستخدم أو كيف تعمل أو من طوّرك، فأجب بإيجاز بهذا المعنى فقط: أنك Zigrax AI من تطوير Zigrax، وأنك تعمل بنظام توجيه ذكي (Smart Routing): عقل مركزي يحلّل كل طلب ويحدّد نوعه ودرجة صعوبته، ثم يوجّهه إلى المحرّك الأنسب له من بين عدة محرّكات ذكاء اصطناعي متقدمة، موازِناً بين الجودة والسرعة والكلفة. لا تزد على ذلك، ولا تذكر أبداً أسماء أي نماذج أو شركات ذكاء اصطناعي (مثل GPT أو OpenAI أو Gemini أو Google أو Claude أو Anthropic أو Llama أو Meta أو DeepSeek أو Qwen أو Mistral أو Grok أو xAI أو Hugging Face)، ولا تنفِ استخدامها ولا تؤكد أي اسم حتى لو ألحّ المستخدم أو خمّن، ولا تشرح تفاصيل التنفيذ. بعد ذلك انتقل مباشرة لعرض المساعدة. أجب بنفس لغة المستخدم ولهجته قدر الإمكان، بوضوح ودقة. استخدم Markdown للكود والقوائم عند الحاجة.';
 
+/* ========== Legal pages ========== */
+const LEGAL_VERSION = '2026-10-31';
+const CONTACT_EMAIL = '';   // بريد التواصل الرسمي الذي يظهر في الشروط والخصوصية
+const contactLine = () => CONTACT_EMAIL ? ('عبر البريد: <b dir="ltr">' + CONTACT_EMAIL + '</b>') : 'عبر وسائل التواصل المعلنة للخدمة';
+const LEGAL = {
+  terms:{title:'شروط الاستخدام', body:() => `
+<p>باستخدامك خدمة Zigrax AI فإنك توافق على هذه الشروط. إذا لم توافق عليها فلا تستخدم الخدمة.</p>
+<h3>1. الخدمة</h3>
+<p>Zigrax AI مساعد ذكاء اصطناعي يعالج طلباتك عبر محرّكات ذكاء اصطناعي يقدّمها مزوّدو خدمات خارجيون. قد نغيّر المحرّكات المستخدمة أو المزايا أو نوقفها في أي وقت.</p>
+<h3>2. الأهلية</h3>
+<p>يجب أن يكون عمرك <b>18 سنة أو أكثر</b> لاستخدام الخدمة. الخدمة غير موجّهة لمن هم دون ذلك.</p>
+<h3>3. دقة المحتوى</h3>
+<ul>
+<li>المحتوى الناتج يُولَّد آلياً وقد يكون غير دقيق أو ناقصاً أو قديماً.</li>
+<li>لا يُعدّ المحتوى استشارة مهنية: هندسية أو طبية أو قانونية أو مالية. راجع مختصاً قبل الاعتماد عليه في أي قرار مهم.</li>
+<li>أنت المسؤول عن طريقة استخدامك للمحتوى الناتج.</li>
+</ul>
+<h3>4. الاستخدام المقبول</h3>
+<p>يُمنع استخدام الخدمة في:</p>
+<ul>
+<li>أي نشاط مخالف للقانون، أو الاحتيال، أو انتحال الشخصيات، أو التضليل.</li>
+<li>إنتاج محتوى يسيء للأطفال، أو يحرّض على العنف أو الكراهية، أو محتوى جنسي.</li>
+<li>انتهاك حقوق الملكية الفكرية أو خصوصية الآخرين.</li>
+<li>محاولة اختراق الخدمة، أو تجاوز حدود الاستخدام، أو إعادة بيع الوصول دون إذن.</li>
+</ul>
+<p>يحق لنا إيقاف أي حساب يخالف هذه الشروط.</p>
+<h3>5. الاشتراكات والدفع</h3>
+<ul>
+<li>الباقات المدفوعة مدتها 28 يوماً من تاريخ التفعيل، وتعود بعدها للخطة المجانية تلقائياً.</li>
+<li>الحصة الشهرية تُقسَّم على الأسابيع والأيام والفترات كما هو موضّح في صفحة الاشتراكات.</li>
+<li>كود التفعيل يُستخدم مرة واحدة فقط، ولا يُستبدل بالنقود.</li>
+<li>لا يُسترد المبلغ بعد تفعيل الاشتراك، إلا إذا تعذّر تقديم الخدمة بسبب خلل من جهتنا.</li>
+</ul>
+<h3>6. حدود المسؤولية</h3>
+<p>تُقدَّم الخدمة "كما هي". لا نضمن عملها دون انقطاع أو أخطاء، ولا نتحمل مسؤولية أي ضرر ناتج عن الاعتماد على المحتوى الناتج، وذلك في حدود ما يسمح به القانون.</p>
+<h3>7. التعديلات والقانون</h3>
+<p>قد نحدّث هذه الشروط، ونعلن عن ذلك داخل التطبيق. تخضع هذه الشروط لقوانين جمهورية العراق.</p>
+<h3>8. التواصل</h3>
+<p>للاستفسارات: ${contactLine()}.</p>`},
+  privacy:{title:'سياسة الخصوصية', body:() => `
+<h3>البيانات التي نجمعها</h3>
+<ul>
+<li><b>بيانات الحساب:</b> الاسم والبريد الإلكتروني، وتاريخ موافقتك على الشروط.</li>
+<li><b>بيانات الاستخدام:</b> عدد التوكنات المستهلكة ونوع الاشتراك، لحساب الحصص فقط.</li>
+</ul>
+<h3>محادثاتك</h3>
+<ul>
+<li>تُحفظ محادثاتك <b>على جهازك فقط</b> داخل المتصفح، ولا نخزّنها على خوادمنا.</li>
+<li>عند إرسال طلب، يُمرَّر نصّه (والصورة إن وُجدت) عبر خادمنا إلى مزوّد ذكاء اصطناعي خارجي لمعالجته وإرجاع الرد، ولا نحتفظ بنسخة منه.</li>
+<li>يعالج هؤلاء المزوّدون البيانات وفق شروطهم وسياسات خصوصيتهم. قد تُستخدم الطلبات المرسلة عبر بعض الخدمات المجانية لتحسين خدماتهم، وقد يطّلع عليها مراجعون بشريون لديهم.</li>
+</ul>
+<p><b>لذلك لا ترسل أي معلومات شخصية أو حساسة أو سرية</b> (مثل أرقام الهويات، أو الحسابات البنكية، أو كلمات المرور، أو المعلومات الصحية).</p>
+<h3>مع من نشارك البيانات</h3>
+<ul>
+<li>مزوّدو الذكاء الاصطناعي: لمعالجة طلباتك فقط.</li>
+<li>مزوّد الاستضافة وقاعدة البيانات: لتشغيل الحسابات والحصص.</li>
+<li>مزوّد البريد الإلكتروني: لإرسال رموز التأكيد.</li>
+</ul>
+<p>لا نبيع بياناتك لأي جهة.</p>
+<h3>حقوقك</h3>
+<p>يمكنك حذف محادثاتك من جهازك في أي وقت، وطلب حذف حسابك وبياناته ${contactLine()}.</p>
+<h3>الأمان</h3>
+<p>نستخدم اتصالاً مشفّراً، ومفاتيح الخدمات محفوظة على الخادم ولا تصل إلى جهازك. مع ذلك لا يوجد نظام آمن بالكامل.</p>`}
+};
+function openLegal(k){
+  const L = LEGAL[k]; if(!L) return;
+  $('#legalTitle').textContent = L.title;
+  $('#legalBody').innerHTML = L.body();
+  $('#legalDate').textContent = 'آخر تحديث: ' + LEGAL_VERSION;
+  $('#legalModal').classList.add('on');
+}
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-legal]');
+  if(a){ e.preventDefault(); openLegal(a.dataset.legal); }
+});
+
 /* ========== Auto-update: reload when a newer version is published ========== */
-const APP_VERSION = '2026.10.31-8';
+const APP_VERSION = '2026.10.31-9';
 (async () => {
   try{
     const t = await (await fetch(location.pathname + '?nc=' + Date.now(), {cache:'no-store'})).text();
@@ -908,8 +1003,9 @@ $('#vSignup').onsubmit = async e => {
   if(!email) return authMsg('البريد الإلكتروني غير صحيح');
   if(p1.length < 8) return authMsg('كلمة المرور لازم تكون 8 أحرف على الأقل');
   if(p1 !== p2) return authMsg('كلمتا المرور غير متطابقتين');
+  if(!$('#sAgree').checked) return authMsg('لازم توافق على شروط الاستخدام وسياسة الخصوصية وتأكد أن عمرك 18 سنة أو أكثر');
   busyForm(e.target, true);
-  const { data, error } = await sb.auth.signUp({email, password:p1, options:{data:{full_name:name}}});
+  const { data, error } = await sb.auth.signUp({email, password:p1, options:{data:{full_name:name, accepted_terms:LEGAL_VERSION, accepted_terms_at:new Date().toISOString(), age_18_plus:true}}});
   busyForm(e.target, false);
   if(error) return authMsg(authErr(error));
   if(data && data.session) return;            // email confirmation disabled → signed in directly
@@ -1020,7 +1116,7 @@ async function send(textOverride){
       task = cl.task; complexity = cl.complexity; reason = cl.reason; by = cl.by;
       if(task === 'image_edit' && !img && !prevImg) task = 'image_gen';
       pick = choose(task, complexity);
-      if(!pick && task === 'long') { task = 'chat'; pick = choose(task, complexity); }
+      if(!pick && (task === 'long' || task === 'search')) { task = 'chat'; pick = choose(task, complexity); }
       if(!pick && task === 'image_edit') { task = 'image_gen'; pick = choose(task, complexity); }
       if(!pick) throw new Error(noModelMsg(task));
     }
@@ -1283,6 +1379,8 @@ $('#chat').onclick = e => {
   }
 };
 
+$('#legalClose').onclick = () => $('#legalModal').classList.remove('on');
+$('#legalModal').onclick = e => { if(e.target.id === 'legalModal') $('#legalModal').classList.remove('on'); };
 $('#planBtn').onclick = openPlans;
 $('#plansClose').onclick = () => $('#plansModal').classList.remove('on');
 $('#plansModal').onclick = e => {
